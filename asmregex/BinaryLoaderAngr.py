@@ -3,6 +3,7 @@ __author__ = 'jordygennissen'
 import os
 import sys
 import logging
+import re
 
 try:
   import angr
@@ -79,13 +80,22 @@ class BinaryLoader ( object ):
     
 
   def load_binary(self, include_obj = None):
+    obj = self.angrproj.loader.main_object
+    # Find the segment that contains our entry point or .text
+    segment = obj.find_segment_containing(obj.entry) 
+    #return self.load_slice(segment.vaddr, size=segment.memsize)
+    return self.load_slice(0x080eb000, size=0x40000)
+    """
     if include_obj is None:
-      binary = self.angrproj.loader.all_objects[0].sections_map['.text']  # TODO: Make sure this is the binary itself, this is hacky
+      binary = self.angrproj.loader.main_object  # TODO: Make sure this is the binary itself, this is hacky
     else:
       binary = include_obj.sections_map['.text']
+    self.l.setLevel(logging.DEBUG)
     self.l.debug('Loading full binary '+str(binary))
     self.l.debug('binary disasm size is %d bytes' % (binary.max_addr - binary.min_addr))
+    self.l.setLevel(logging.WARNING)
     return self.load_slice(binary.min_addr, size=(binary.max_addr - binary.min_addr))
+    """
     
   def _load_capstone_insns(self, asmblock):
     asmlist = AssemblyList()
@@ -106,9 +116,14 @@ class BinaryLoader ( object ):
       asm = AssemblyInstruction()
       #asm['disasm'] = asmblock[i].insn.mnemonic + ' ' + asmblock[i].insn.op_str
       asm['opcode'] = asmblock[i].insn.mnemonic
+
+      op_str = asmblock[i].insn.op_str
+      raw_args = re.split(r',(?![^\[]*\])', op_str)
       
-      for arg in asmblock[i].insn.op_str.split(','):
-        asm['args'].append(arg.replace('ptr', '').replace(' ', ''))  # remove spaces
+      for arg in raw_args:
+          clean_arg = arg.strip().replace('ptr', '')
+          asm['args'].append(clean_arg)
+
       asm['addr'] = asmblock[i].insn.address
       asmlist.append(asm)
       address_map[asm['addr']] = count

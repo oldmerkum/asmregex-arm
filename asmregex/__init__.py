@@ -8,20 +8,7 @@ from .PatternMatcher import AssemblyMatcher, AssemblyMatcherIterator  # All ther
 from .PatternParser import PatternParser  # all
 from .PatternPiece import *  # many
 
-
-try:
-  import angr  # for testing purposes, because loadBinaries gets an angr Project to pass on to the loader.
-               # Note to self: WTF testing purposes?
-  from .BinaryLoaderAngr import BinaryLoader
-except ImportError as e:
-  try:
-    print("Angr not found with error %s, trying r2" % str(e), file = sys.stderr)
-    import r2pipe
-    from .BinaryLoaderRadare import BinaryLoader
-  except ImportError as e:
-    raise RuntimeError('No angr nor R2Pipe found. Can\'t load assembly code')
-
-
+from .ghidra_loader import GhidraLoader
 
 """
 Requirements for asmregex 2.0

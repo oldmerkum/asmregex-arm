@@ -4,21 +4,12 @@ __author__ = 'jordygennissen'
 import copy
 import logging  # Is used, even if pycharm says it is not
 import sys
-try:
-  import angr  # for testing purposes, because loadBinaries gets an angr Project to pass on to the loader.
-  import asmregex.BinaryLoaderAngr as BinaryLoader
-except ImportError as e:
-  try:
-    import r2pipe
-    import asmregex.BinaryLoaderRadare as BinaryLoader
-  except ImportError as e:
-    raise RuntimeError('No angr no R2Pipe found. Can\'t load assembly code')
-
-
 
 # local
 from asmregex.PatternPiece import *
 import asmregex.PatternParser as PatternParser
+
+from asmregex.ghidra_loader import GhidraLoader
 
 class AssemblyMatcher ( object ) : 
   """Main class for matching assembly regexes
@@ -62,6 +53,7 @@ class AssemblyMatcher ( object ) :
           continue
         if line[0] == '[':  # new pattern
           if not pattern_name == '':   # not the first one, save the old pattern we have buffered
+            self.l.debug(f"Final Pattern String for {pattern_name}: {tempstr}")
             self.loadPattern(tempstr, pattern=pattern_name)
           pattern_name = line.replace('[','').replace(']','')
           tempstr = ''
@@ -92,7 +84,14 @@ class AssemblyMatcher ( object ) :
     :return: self
     """
     return self.loadBinaries(bindir=binary)
- 
+
+  def load_binary(self, binary_path):
+    loader = GhidraLoader(binary_path)
+    asms, mappings = loader.get_all()
+    self.asms.append(asms)
+    self.address_maps.append(mappings)
+    return self
+
   def loadBinaries(self, angrproject=None, bindir=None, includes=list()):
     loader = BinaryLoader.BinaryLoader(angrproject=angrproject, bindir=bindir, includes=includes)
     asms, mappings = loader.get_all()

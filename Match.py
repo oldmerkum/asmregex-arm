@@ -2,16 +2,16 @@
 __author__ = 'jordygennissen'
 
 import sys
-import angr
+import time
 
 from asmregex.PatternMatcher import * 
 
 def main(binary, patternfile, pat=None):
+  start_time = time.time()
   """Checks one binary on all patterns given in the file of arg2, and reports the amount of matches only"""
   m = AssemblyMatcher() 
   m.loadPatternFromFile(patternfile)
-  angrproject = angr.Project(binary)
-  m.loadBinaries(angrproject=angrproject)
+  m.load_binary(binary)
   print('On binary ' + binary)
   if pat is not None and pat in m.patterns.keys():
     print('On ' + pat + ' only')
@@ -23,9 +23,9 @@ def main(binary, patternfile, pat=None):
     matches = m.match(pattern=patname)
     #if len(matches) > 0:
     #  print(str(len(matches)) + ' matches found in ' + patname + ':')
-      
-
-
+  end_time = time.time()
+  duration = end_time - start_time
+  print(f"total time: {duration:.2f} seconds")
 
 if __name__ == '__main__':
   arg = sys.argv

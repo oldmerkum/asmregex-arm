@@ -311,32 +311,46 @@ class AsmPP ( PatternPiece ):
   :attr Type: inherited type specifying this is a PPType.ASM piece
   """
 
+
   std_patterns = {
       #  Referenced reg (i.e. [rax - 0xa] )
       # on word[eax-0x20]: g1->word, g2->eax, g3->-0x20, g4->-, g5->0x20, g6->0x
-      'RR' : re.compile('^([dqbw][a-z]{3,4})?\\[([a-z][a-z0-9]{1,2})(([+-])((0x)?[0-9a-f]+))?\\]$'),
+      'RR' : re.compile(r'^([dqbw][a-z]{3,4})?\[([a-z][a-z0-9]{1,2})(([+-])((0x)?[0-9a-f]+))?\]$'),
       #  Direct register (i.e. rax, ebx, edi, al)
-      'DR' : re.compile('^[a-z][a-z0-9]{1,2}$'),
+      #'DR' : re.compile('^[a-z][a-z0-9]{1,2}$'),
+      'DR' : re.compile(r'^\s*[a-z]{1,4}[0-9]{0,2},?\s*$'),
       #  Concrete constant (any) (i.e. 0x400737, 1)
-      'CC' : re.compile('^(0x[0-9a-f]{1,8})|([0-9])$'),
+      #'CC' : re.compile('^(0x[0-9a-f]{1,8})|([0-9])$'),
+      'CC' : re.compile(r'^\s*#?(0x[0-9a-f]+|[0-9]+)$'),
       #  (likely to be) Random Constant: 0x10 - 0xfffffffe, but not 0x40xxxx (pointer)
-      'RC' : re.compile('(?!^0x[f]{8}$)(?!^0x40[0-9a-f]{4}$)^0x[0-9a-f]{2,8}$'),
+      'RC' : re.compile(r'(?!^0x[f]{8}$)(?!^0x40[0-9a-f]{4}$)^0x[0-9a-f]{2,8}$'),
       #  (likely to be) Pointer Value: 0x0040xxxx
-      'PV' : re.compile('^0x(00)?40[0-9a-f]{4}$')
+      'PV' : re.compile(r'^0x(00)?40[0-9a-f]{4}$'),
+      # attempt to match the ARM bracketed memory
+      'ME' : re.compile(r'^\[.*\]$'),
+      'MI' : re.compile(r'^\[[a-z]{1,4}[0-9]{0,2},#?(0x[0-9a-f]+|[0-9]+)\]$'),  
+      'MR' : re.compile(r'^\[[a-z0-9]+,[a-z0-9]+\]$'),
   }
+
+  # ARM updates
+  #std_opcodes.MO += ['mvn', 'ldr', 'str']
+  #std_opcodes.ALU += ['rsb', 'mla', 'cmp']
+  #std_opcodes.JC += ['b', 'bl', 'beq', 'bne', 'bgt', 'blt', 'ble']
+  #std_opcodes.PP += ['stmdb', 'ldmia']
   std_opcodes = { # Mind that no std opcode is allowed to start with I, as this specifies an inverted opcode match
-      'JC' : ['ja', 'jae', 'jb', 'jbe', 'jc', 'je', 'jg', 'jge', 'jl', 'jle', 'jo', 'jp', 'jpe', 'js', 'jz'],
+      'JC' : ['ja', 'jae', 'jb', 'jbe', 'jc', 'je', 'jg', 'jge', 'jl', 'jle', 'jo', 'jp', 'jpe', 'js', 'jz', 'b', 'bl', 'beq', 'bne', 'bgt', 'blt', 'ble'],
       'JS' : ['je', 'jne', 'jz'],
-      'ALU': ['add', 'sub', 'inc', 'dec', 'and', 'or', 'xor', 'not', 'mul', 'imul', 'div', 'idiv'],
+      'ALU': ['add', 'sub', 'inc', 'dec', 'and', 'or', 'xor', 'not', 'mul', 'imul', 'div', 'idiv', 'rsb', 'mla', 'cmp'],
       'SS' : ['shl', 'sal', 'shr', 'sar'],
       'RR' : ['rol', 'rcl', 'ror', 'rcr'],
       'FL' : ['stc', 'cls', 'cmc', 'std', 'cld', 'sti', 'cli'],
       'PU' : ['push', 'pusha', 'pushf'],
       'PO' : ['pop', 'popa', 'popf'],
-      'PP' : ['push', 'pusha', 'pushf', 'pop', 'popa', 'popf'],
-      'MO' : ['mov', 'lea']
+      'PP' : ['push', 'pusha', 'pushf', 'pop', 'popa', 'popf', 'stmdb', 'ldmia'],
+      'MO' : ['mov', 'lea', 'mvn', 'ldr', 'ldr.w', 'str', 'str.w']
   }
   anylist = ['any']
+
 
   # patternstr should be a string as defined, either including or excluding the delimiting <>
   # EVERY PATTERN MUST END WITH A DOT AND POSSIBLE OPTIONS!
@@ -397,16 +411,19 @@ class AsmPP ( PatternPiece ):
       self.l.debug('Anything is possible')
     elif xor(not asmobj['opcode'] in self.opcode, self.invert_opcode):  # Add the match invert possibility using xor
       return False
-    if self.args[0] is not None and not self._match_arg(0, asmobj):
-      self.l.debug('Not a match on arg 1 "' + str(asmobj['args'][0]) + '"')
-      return False
-    if self.args[1] is not None and not self._match_arg(1, asmobj):
-      self.l.debug('Not a match on arg 2 "' + str(asmobj['args'][1]) + '"')
-      return False
-    if self.args[0]:
-      self.l.debug('Match success on ' + asmobj ['args'][0])
-    if self.args[1]:
-      self.l.debug('Match success on ' + asmobj ['args'][1])
+    for i in range(len(self.args)):
+      pattern_to_check = self.args[i]
+      if pattern_to_check is None:
+        continue
+      if i < len(asmobj['args']):
+        if not self._match_arg(i, asmobj):
+          self.l.debug(f"Not a match on arg {i}: {str(asmobj['args'][i])}")
+          return False
+        else:
+          self.l.debug(f"Match success on arg {i}: {str(asmobj['args'][i])}")
+      else:
+        self.l.debug(f"Fail: pattern expected arg {i}, but only {len(asmobj['args'])} args")
+
     return True  # it made it past all checks!
 
   def _parse_op(self, instrstr):
